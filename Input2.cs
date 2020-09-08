@@ -1,4 +1,5 @@
-﻿using StardewValley;
+﻿using Starbot.Logging;
+using StardewValley;
 using StardewValley.Util;
 using System;
 using System.Collections.Generic;
@@ -24,14 +25,14 @@ namespace Starbot
 
         public void InstallSimulator()
         {
-            Mod.instance.Monitor.Log("Input simulator installed.", StardewModdingAPI.LogLevel.Info);
+            Logger.Info("Input simulator installed.");
             Installed = true;
             typeof(Game1).GetField("inputSimulator", BindingFlags.NonPublic | BindingFlags.Static).SetValue(null, this);
         }
 
         public void UninstallSimulator()
         {
-            Mod.instance.Monitor.Log("Input simulator uninstalled.", StardewModdingAPI.LogLevel.Info);
+            Logger.Info("Input simulator uninstalled.");
             Installed = false;
             typeof(Game1).GetField("inputSimulator", BindingFlags.NonPublic | BindingFlags.Static).SetValue(null, null);
         }

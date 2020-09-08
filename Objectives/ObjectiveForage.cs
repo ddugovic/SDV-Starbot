@@ -1,4 +1,5 @@
-﻿using StardewValley;
+﻿using Starbot.Logging;
+using StardewValley;
 using StardewValley.Menus;
 using System;
 using System.Collections.Generic;
@@ -10,11 +11,11 @@ namespace Starbot.Objectives
 {
     public class ObjectiveForage : Objective
     {
-        public override string AnnounceMessage => "Forage the " + targetMap;
+        public override string announceMessage => "Forage the " + targetMap;
 
-        public override string UniquePoolId => "forage." + targetMap;
+        public override string uniquePoolId => "forage." + targetMap;
 
-        public override bool Cooperative => false;
+        public override bool cooperative => false;
 
         string targetMap;
         public List<Tuple<int, int, bool>> ForageSpots = new List<Tuple<int, int, bool>>();
@@ -45,18 +46,18 @@ namespace Starbot.Objectives
             //step one: are we on the beach? no? route to the beach.
             if(Game1.player.currentLocation.NameOrUniqueName != targetMap)
             {
-                if (!Core.IsRouting)
+                if (!Mod.i.core.IsRouting)
                 {
                     int tx = -3, ty = -3;
                     Utility.getDefaultWarpLocation(targetMap, ref tx, ref ty);
-                    Core.RouteTo(targetMap, tx, ty, true);
+                    Mod.i.core.RouteTo(targetMap, false, tx, ty, true);
                 }
                 return;
             }
 
             //step two: scan for forages on the map
             if (!hasScanned){
-                Mod.instance.Monitor.Log("Scanning for forage items...", StardewModdingAPI.LogLevel.Warn);
+                Logger.Warn("Scanning for forage items...");
                 foreach(var o in Game1.currentLocation.Objects.Values)
                 {
                     if (o.isForage(Game1.currentLocation))
@@ -64,7 +65,7 @@ namespace Starbot.Objectives
                         bool hs = false;
                         if (o.ParentSheetIndex == 590) hs = true;
                         ForageSpots.Add(new Tuple<int, int, bool>((int)o.TileLocation.X, (int)o.TileLocation.Y, hs));
-                        Mod.instance.Monitor.Log("Found forage item: " + (int)o.TileLocation.X + ", " + (int)o.TileLocation.Y, StardewModdingAPI.LogLevel.Alert);
+                        Logger.Alert("Found forage item: " + (int)o.TileLocation.X + ", " + (int)o.TileLocation.Y);
                     }
                 }
                 hasScanned = true;
@@ -86,34 +87,17 @@ namespace Starbot.Objectives
                 WasRoutingToForage = true;
 
                 //check hotbar for hoe
-                if(spot.Item3) Core.EquipToolIfOnHotbar("Hoe"); //in case of worms
+                if(spot.Item3)
+                    Mod.i.core.EquipToolIfOnHotbar("Hoe"); //in case of worms
 
                 int x = spot.Item1;
                 int y = spot.Item2;
-                //try to route to the tile below it
-                List<Tuple<string, int, int>> sides = new List<Tuple<string, int, int>>();
-                sides.Add(new Tuple<string, int, int>(targetMap, x, y + 1));
-                sides.Add(new Tuple<string, int, int>(targetMap, x, y - 1));
-                sides.Add(new Tuple<string, int, int>(targetMap, x + 1, y));
-                sides.Add(new Tuple<string, int, int>(targetMap, x - 1, y));
-                sides.Shuffle();
-                if (!Core.RouteTo(sides[0].Item1, sides[0].Item2, sides[0].Item3))
-                {
-                    //try to route to the tile above it
-                    if(!Core.RouteTo(sides[1].Item1, sides[1].Item2, sides[1].Item3))
-                    {
-                        //try to route to the tile right of it
-                        if(!Core.RouteTo(sides[2].Item1, sides[2].Item2, sides[2].Item3))
-                        {
-                            //try the tile left of it
-                            if(!Core.RouteTo(sides[3].Item1, sides[3].Item2, sides[3].Item3))
-                            {
-                                //we can't reach this one. remove it from the list
-                                ForageSpots.RemoveAt(0);
-                                WasRoutingToForage = false;
-                            }
-                        }
-                    }
+                //try the tile left of it
+                if (!Mod.i.core.RouteTo(targetMap, true, x, y)) {
+                    //we can't reach this one. remove it from the list
+                    ForageSpots.RemoveAt(0);
+                    Logger.Trace("Can't route to " + x + "," + y + " forage. " + ForageSpots.Count() + " remaining.");
+                    WasRoutingToForage = false;
                 }
                 if (WasRoutingToForage)
                 {
@@ -134,7 +118,7 @@ namespace Starbot.Objectives
                     int px = Game1.player.getTileX();
                     int py = Game1.player.getTileY();
 
-                    Core.FaceTile(x, y);
+                    Mod.i.core.FaceTile(x, y);
 
                     WasRoutingToForage = false;
                     return;
@@ -142,11 +126,13 @@ namespace Starbot.Objectives
 
                 //pick
                 bool hoeSpot = spot.Item3;
-                Core.FaceTile(spot.Item1, spot.Item2);
+                Mod.i.core.FaceTile(spot.Item1, spot.Item2);
                 
-                if (hoeSpot) Core.SwingTool();
-                else Core.DoActionButton();
-                Mod.instance.Monitor.Log("Pick!", StardewModdingAPI.LogLevel.Warn);
+                if (hoeSpot)
+                    Mod.i.core.SwingTool();
+                else
+                    Mod.i.core.DoActionButton();
+                Logger.Warn("Pick!");
                 ForageSpots.RemoveAt(0);
                 RoutingComplete = false;
             }
@@ -160,7 +146,7 @@ namespace Starbot.Objectives
 
                 if(Game1.activeClickableMenu is DialogueBox)
                 {
-                    Mod.instance.Monitor.Log("stupid archeology box. shoo", StardewModdingAPI.LogLevel.Warn);
+                    Logger.Warn("stupid archeology box. shoo");
                     Game1.dialogueUp = false;
                     Game1.currentDialogueCharacterIndex = 0;
                     Game1.playSound("dialogueCharacterClose");

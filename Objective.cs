@@ -14,9 +14,9 @@ namespace Starbot
         //if a task fails 3 times it will be removed from the day's agenda
         public virtual int FailureCount { get; set; }
 
-        public abstract string AnnounceMessage { get; }
-        public abstract string UniquePoolId { get; }
-        public abstract bool Cooperative { get; }
+        public abstract string announceMessage { get; }
+        public abstract string uniquePoolId { get; }
+        public abstract bool cooperative { get; }
 
         public virtual void Fail()
         {

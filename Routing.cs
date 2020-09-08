@@ -1,4 +1,5 @@
-﻿using StardewModdingAPI;
+﻿using Starbot.Logging;
+using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
 using System;
@@ -22,10 +23,10 @@ namespace Starbot
             {
                 //client mode
                 MapConnections.Clear();
-                Mod.instance.Monitor.Log("Starbot is now in multiplayer client mode.", LogLevel.Info);
-                Mod.instance.Monitor.Log("The server will need to have Starbot installed to proceed.", LogLevel.Info);
-                Mod.instance.Monitor.Log("Awaiting response from server...", LogLevel.Info);
-                Mod.instance.Helper.Multiplayer.SendMessage<int>(0, "authRequest");
+                Logger.Info("Starbot is now in multiplayer client mode.");
+                Logger.Info("The server will need to have Starbot installed to proceed.");
+                Logger.Info("Awaiting response from server...");
+                Mod.i.Helper.Multiplayer.SendMessage<int>(0, "authRequest");
             } else
             {
                 //host/singleplayer mode
@@ -36,43 +37,52 @@ namespace Starbot
 
         public static Dictionary<string, HashSet<string>> BuildRouteCache()
         {
-            var returnValue = new Dictionary<string, HashSet<string>>();
-            foreach (var gl in Game1.locations)
+            var routeDictionary = new Dictionary<string, HashSet<string>>();
+            foreach (var map in Game1.locations)
             {
-                string key = gl.NameOrUniqueName;
+                string key = map.NameOrUniqueName;
                 if (!string.IsNullOrWhiteSpace(key))// && !gl.isTemp())
                 {
-                    if (gl.warps != null && gl.warps.Count > 0)
+                    if (map.warps != null && map.warps.Count > 0)
                     {
-                        //Mod.instance.Monitor.Log("Learning about " + key, LogLevel.Alert);
-                        returnValue[key] = new HashSet<string>();
-                        foreach (var w in gl.warps) returnValue[key].Add(w.TargetName);
-                        foreach (var d in gl.doors.Values) returnValue[key].Add(d);
-                        //foreach (var s in MapConnections[key]) Mod.instance.Monitor.Log("It connects to " + s, LogLevel.Warn);
+                        Logger.Alert("Learning about " + key);
+                        routeDictionary[key] = new HashSet<string>();
+                        foreach (var w in map.warps) routeDictionary[key].Add(w.);
+                        foreach (var d in map.doors.Values) routeDictionary[key].Add(d);
+                        foreach (var s in routeDictionary[key]) Logger.Warn("It connects to " + s);
                     }
                 }
-                if(gl is StardewValley.Locations.BuildableGameLocation)
+                if(map is StardewValley.Locations.BuildableGameLocation)
                 {
-                    StardewValley.Locations.BuildableGameLocation bl = gl as StardewValley.Locations.BuildableGameLocation;
+                    StardewValley.Locations.BuildableGameLocation bl = map as StardewValley.Locations.BuildableGameLocation;
                     foreach(var b in bl.buildings)
                     {
-                        if(!returnValue.ContainsKey(key)) returnValue[key] = new HashSet<string>();
-                        returnValue[key].Add(b.indoors.Value.NameOrUniqueName);
-                        //add the way in
-                        returnValue[b.indoors.Value.NameOrUniqueName] = new HashSet<string>();
-                        //add the way out
-                        returnValue[b.indoors.Value.NameOrUniqueName].Add(key);
+                        if (b.indoors != null && b.indoors.Value != null) {
+                            var indoorsKey = b.indoors.Value.NameOrUniqueName;
+                            if (!routeDictionary.ContainsKey(key)) {
+                                routeDictionary[key] = new HashSet<string>();
+                            }
+                            routeDictionary[key].Add(indoorsKey);
+                            //add the way in
+                            Logger.Alert("Learning about " + indoorsKey);
+                            routeDictionary[indoorsKey] = new HashSet<string>();
+                            //add the way out
+                            foreach (var s in routeDictionary[indoorsKey]) {
+                                Logger.Warn("It connects to " + s);
+                            }
+                            routeDictionary[indoorsKey].Add(key);
+                        }
                     }
                 }
             }
-            return returnValue;
+            return routeDictionary;
         }
 
         public static void Multiplayer_ModMessageReceived(object sender, ModMessageReceivedEventArgs e)
         {
             if (Game1.IsMasterGame && e.Type == "authRequest")
             {
-                Mod.instance.Monitor.Log("Starbot authorization requested by client. Approving...");
+                Logger.Trace("Starbot authorization requested by client. Approving...");
                 //listen for authorization requests
                 Dictionary<string, HashSet<string>> response = null;
                 if (MapConnections.Count > 0)
@@ -83,19 +93,21 @@ namespace Starbot
                 {
                     response = BuildRouteCache();
                 }
-                Mod.instance.Helper.Multiplayer.SendMessage<Dictionary<string, HashSet<string>>>(response, "authResponse");
-            } else if(!Game1.IsMasterGame && e.Type == "authResponse")
+                Mod.i.Helper.Multiplayer.SendMessage<Dictionary<string, HashSet<string>>>(response, "authResponse");
+            } 
+            else if(!Game1.IsMasterGame && e.Type == "authResponse")
             {
                 //listen for authorization responses
                 MapConnections = e.ReadAs<Dictionary<string, HashSet<string>>>();
-                Mod.instance.Monitor.Log("Starbot authorization request was approved by server.");
-                Mod.instance.Monitor.Log("Server offered routing data for " + MapConnections.Count + " locations.");
+                Logger.Trace("Starbot authorization request was approved by server.");
+                Logger.Trace("Server offered routing data for " + MapConnections.Count + " locations.");
                 Ready = true;
-            } else if(e.Type == "taskAssigned")
+            } 
+            else if(e.Type == "taskAssigned")
             {
                 string task = e.ReadAs<string>();
-                Mod.instance.Monitor.Log("Another player has taken task: " + task);
-                Core.ObjectivePool.RemoveAll(x => x.UniquePoolId == task);
+                Logger.Trace("Another player has taken task: " + task);
+                Mod.i.core.ObjectivePool.RemoveAll(x => x.uniquePoolId == task);
             }
         }
 
@@ -117,15 +129,23 @@ namespace Starbot
             if (blacklist == null) blacklist = new List<string>();
             List<string> route2 = new List<string>(route);
             route2.Add(step);
-            foreach (string s in MapConnections[step])
-            {
-                if (route.Contains(s) || blacklist.Contains(s)) continue;
-                if (s == target)
-                {
+            // Do a breadth-first search
+            foreach (string s in MapConnections[step]) {
+                if (route.Contains(s) || blacklist.Contains(s))
+                    continue;
+                if (s == target) {
+                    return route2;
+                }
+            }
+            foreach (string s in MapConnections[step]) {
+                if (route.Contains(s) || blacklist.Contains(s))
+                    continue;
+                if (s == target) {
                     return route2;
                 }
                 List<string> result = SearchRoute(s, target, route2, blacklist);
-                if (result != null) return result;
+                if (result != null)
+                    return result;
             }
             blacklist.Add(step);
             return null;

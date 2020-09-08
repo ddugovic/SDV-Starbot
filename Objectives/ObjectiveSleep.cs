@@ -1,4 +1,5 @@
-﻿using StardewValley;
+﻿using Starbot.Logging;
+using StardewValley;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,9 +10,9 @@ namespace Starbot.Objectives
 {
     class ObjectiveSleep : Objective
     {
-        public override string AnnounceMessage => "Going to sleep";
-        public override string UniquePoolId => "sleep";
-        public override bool Cooperative => true; //not exclusive to a single player
+        public override string announceMessage => "Going to sleep";
+        public override string uniquePoolId => "sleep";
+        public override bool cooperative => true; //not exclusive to a single player
 
         public ObjectiveSleep()
         {
@@ -31,14 +32,14 @@ namespace Starbot.Objectives
             //step one: route to the homelocation
             if (Game1.player.homeLocation != Game1.player.currentLocation.NameOrUniqueName)
             {
-                Core.RouteTo(Game1.player.homeLocation, critical: true);
+                Mod.i.core.RouteTo(Game1.player.homeLocation, false, critical: true);
                 return;
             }
 
             //step two: to bed!
             if(!(Game1.player.currentLocation is StardewValley.Locations.FarmHouse))
             {
-                Mod.instance.Monitor.Log("This is home but not a FarmHouse?!", StardewModdingAPI.LogLevel.Error);
+                Logger.Error("This is home but not a FarmHouse?!");
                 Fail();
                 return;
             }
@@ -46,7 +47,7 @@ namespace Starbot.Objectives
             var fh = Game1.player.currentLocation as StardewValley.Locations.FarmHouse;
             var bed = fh.getBedSpot();
 
-            Core.RouteTo(Game1.player.currentLocation.NameOrUniqueName, bed.X, bed.Y, true);
+            Mod.i.core.RouteTo(Game1.player.currentLocation.NameOrUniqueName, false, bed.X, bed.Y, true);
         }
 
         public override void CantMoveUpdate()
@@ -54,9 +55,9 @@ namespace Starbot.Objectives
             base.CantMoveUpdate();
             if (Game1.dialogueUp)
             {
-                Mod.instance.Monitor.Log("Bed prompt activated. Choosing yes...", StardewModdingAPI.LogLevel.Info);
-                Core.AnswerGameLocationDialogue(0);
-                Core.IsSleeping = true;
+                Logger.Info("Bed prompt activated. Choosing yes...");
+                Mod.i.core.AnswerGameLocationDialogue(0);
+                Mod.i.core.IsSleeping = true;
                 IsComplete = true;
             }
         }

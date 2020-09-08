@@ -1,34 +1,50 @@
 ﻿using StardewModdingAPI;
 using System;
 using StardewModdingAPI.Events;
+using Starbot.Pathfinding;
+using Starbot.Threading;
+using System.Runtime.CompilerServices;
 
 namespace Starbot
 {
     public class Mod : StardewModdingAPI.Mod
     {
-        internal static Mod instance;
+        internal static Mod i;
+
         internal static Random RNG = new Random(Guid.NewGuid().GetHashCode());
         internal static bool BotActive = false;
         internal static Input2 Input = new Input2();
 
+        internal ThreadManager Threading;
+        internal PathingManager Pathfinding;
+        internal StarbotCore core;
+
         public override void Entry(IModHelper helper)
         {
-            instance = this;
+            i = this;
+            i.Threading = new ThreadManager();
+            i.Pathfinding = new PathingManager();
+            i.core = new StarbotCore();
 
             //Input.Setup();
 
             Helper.Events.Input.ButtonPressed += Input_ButtonPressed;
             Helper.Events.GameLoop.UpdateTicked += GameLoop_UpdateTicked;
+            Helper.Events.Display.Rendered += Display_Rendered;
             Helper.Events.Multiplayer.ModMessageReceived += Routing.Multiplayer_ModMessageReceived;
         }
 
-
+        private void Display_Rendered(object sender, RenderedEventArgs e) {
+            if (!BotActive)
+                return;
+            core.Display(e);
+        }
 
         private void GameLoop_UpdateTicked(object sender, UpdateTickedEventArgs e)
         {
             if (!BotActive) return;
-            Core.Update();
-            if (Core.WantsToStop)
+            core.Update(e);
+            if (core.WantsToStop)
             {
                 Monitor.Log("Bot is going to stop itself to prevent further complications.", LogLevel.Warn);
                 ToggleBot();
@@ -69,12 +85,12 @@ namespace Starbot
             if (!BotActive)
             {
                 Input.UninstallSimulator();
-                Core.ReleaseKeys();
+                core.ReleaseKeys();
             }
             else
             {
                 Input.InstallSimulator();
-                Core.Reset();
+                core.Reset();
             }
         }
     }
