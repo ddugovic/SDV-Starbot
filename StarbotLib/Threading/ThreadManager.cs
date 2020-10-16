@@ -1,28 +1,18 @@
-﻿using Starbot.Logging;
-using StardewModdingAPI.Events;
+﻿using StarbotLib.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 
-namespace Starbot.Threading
+namespace StarbotLib.Threading
 {
-    public class ThreadManager : Manager
+    public class ThreadManager : MarshalByRefObject
     {
+        private StarbotServerCore core;
 
-        public ThreadManager()
+        public ThreadManager(StarbotServerCore core)
         {
-
-        }
-
-        public override void UpdateTicked(object sender, UpdateTickedEventArgs e)
-        {
-        }
-
-        public override void Rendered(object sender, RenderedEventArgs e)
-        {
+            this.core = core;
         }
 
         private readonly Dictionary<Int32, Thread> _watchdogThreads = new Dictionary<Int32, Thread>();
@@ -74,7 +64,7 @@ namespace Starbot.Threading
             }
             catch (Exception e)
             {
-                SLogger.Error("Error logging thread start.", e);
+                CLogger.Error("Error logging thread start.", e);
             }
         }
 
@@ -89,7 +79,7 @@ namespace Starbot.Threading
             }
             catch (Exception e)
             {
-                SLogger.Error("Error logging thread exit.", e);
+                CLogger.Error("Error logging thread exit.", e);
             }
         }
 
@@ -109,7 +99,7 @@ namespace Starbot.Threading
             }
             catch (Exception e)
             {
-                SLogger.Error("Error pruning watchdog threads.", e);
+                CLogger.Error("Error pruning watchdog threads.", e);
             }
         }
 
@@ -126,13 +116,13 @@ namespace Starbot.Threading
                         {
                             aliveThreads = aliveThreads + (value.Name + "[" + value.ManagedThreadId + "] ");
                         }
-                        SLogger.Warn("Thread warning: " + aliveThreads);
+                        CLogger.Warn("Thread warning: " + aliveThreads);
                     }
                 }
             }
             catch (Exception e)
             {
-                SLogger.Error("Error monitoring watchdog thread count.", e);
+                CLogger.Error("Error monitoring watchdog thread count.", e);
             }
         }
 
@@ -149,7 +139,7 @@ namespace Starbot.Threading
             }
             catch (Exception e)
             {
-                SLogger.Error("Error checking for matching alive thread.", e);
+                CLogger.Error("Error checking for matching alive thread.", e);
             }
             return false;
         }
@@ -183,23 +173,19 @@ namespace Starbot.Threading
                     {
                         if (attempts > 20)
                         {
-                            SLogger.Warn("Threads still exiting: " + aliveThreads);
+                            CLogger.Warn("Threads still exiting: " + aliveThreads);
                         }
                         else
                         {
-                            SLogger.Debug("Threads still exiting: " + aliveThreads);
+                            CLogger.Info("Threads still exiting: " + aliveThreads);
                         }
                     }
                 } while (alive);
             }
             catch (Exception e)
             {
-                SLogger.Error("Error while monitoring shutdown.", e);
+                CLogger.Error("Error while monitoring shutdown.", e);
             }
-        }
-
-        public override void SaveLoaded(object sender, SaveLoadedEventArgs e)
-        {
         }
     }
 }

@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Starbot.Logging {
-    class Logger {
+    class SLogger {
 
         public static void Trace(string message) {
             Log(message, LogLevel.Trace, null);

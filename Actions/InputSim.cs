@@ -8,31 +8,32 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Starbot
+namespace Starbot.Actions
 {
-    public class Input2 : IInputSimulator
+    public class InputSim : IInputSimulator
     {
         public static bool Installed { get; set;
         }
-        public Input2()
+        public InputSim()
         {
 
         }
 
-        public void Update()
+        public void Tick()
         {
+
         }
 
         public void InstallSimulator()
         {
-            Logger.Info("Input simulator installed.");
+            SLogger.Info("Input simulator installed.");
             Installed = true;
             typeof(Game1).GetField("inputSimulator", BindingFlags.NonPublic | BindingFlags.Static).SetValue(null, this);
         }
 
         public void UninstallSimulator()
         {
-            Logger.Info("Input simulator uninstalled.");
+            SLogger.Info("Input simulator uninstalled.");
             Installed = false;
             typeof(Game1).GetField("inputSimulator", BindingFlags.NonPublic | BindingFlags.Static).SetValue(null, null);
         }

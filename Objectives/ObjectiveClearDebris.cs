@@ -1,58 +1,55 @@
-﻿using Microsoft.Xna.Framework;
-using Starbot.Logging;
-using StardewModdingAPI.Events;
+﻿using Starbot.Logging;
+using Starbot.Pathfinding;
+using StarbotLib.Pathfinding;
+using StarbotLib.World;
 using StardewValley;
-using StardewValley.TerrainFeatures;
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Starbot.Objectives
 {
-    public class ObjectiveClearDebris : Objective {
+    public class ObjectiveClearDebris : Objective
+    {
         public override string announceMessage => "Clear debris from the " + targetMap;
         public override string uniquePoolId => "cleardebris." + targetMap;
         public override bool cooperative => true;
         string targetMap;
 
-        public struct DebrisSpot {
-            public int x;
-            public int y;
-            public string type;
+        public class DebrisSpot
+        {
+            public WorldObject worldObject;
+            public string tool;
+            public Route route;
         }
         public List<DebrisSpot> DebrisSpots = new List<DebrisSpot>();
 
         bool hasScanned = false;
+        HashSet<string> availableTools;
 
-        bool WasRoutingToDebris = false;
-
-        bool DebrisRoutingComplete = false;
+        DebrisSpot currentSpot = null;
 
         public ObjectiveClearDebris(string map)
         {
             IsComplete = false;
             this.targetMap = map;
+            availableTools = new HashSet<string>();
         }
 
         public override void Reset()
         {
             base.Reset();
             hasScanned = false;
-            WasRoutingToDebris = false;
-            DebrisRoutingComplete = false;
             DebrisSpots.Clear();
             IsComplete = false;
         }
 
         List<DebrisSpot> SortByDistance(List<DebrisSpot> debrisList)
         {
-            var playerX = Game1.player.getTileX();
-            var playerY = Game1.player.getTileY();
-            debrisList.Sort((debrisA, debrisB) => 
-                (Math.Sqrt(Math.Pow(playerX - debrisA.x, 2) + Math.Pow(playerY - debrisA.y, 2)))
-                .CompareTo((Math.Sqrt(Math.Pow(playerX - debrisB.x, 2) + Math.Pow(playerY - debrisB.y, 2))))
+
+            debrisList.Sort((debrisA, debrisB) =>
+                Mod.i.maps.PlayerDistance(debrisA.worldObject.location)
+                .CompareTo(
+                Mod.i.maps.PlayerDistance(debrisB.worldObject.location))
             );
             return debrisList;
         }
@@ -60,131 +57,149 @@ namespace Starbot.Objectives
         public override void Step()
         {
             base.Step();
+
+            // Don't do anything if we're waiting
+            if (Mod.i.IsWaiting())
+            {
+                return;
+            }
+
             //short circuit here if energy is low
             if (Game1.player.Stamina <= 5)
             {
                 Mod.i.core.FailObjective();
-                Logger.Trace("Cancelling task, not enough stamina!");
-                return;
-            }
-
-            //step one: are we on the target map?
-            if (Game1.player.currentLocation.NameOrUniqueName != targetMap)
-            {
-                if (!Mod.i.core.IsRouting)
-                {
-                    int tx = -3, ty = -3;
-                    Utility.getDefaultWarpLocation(targetMap, ref tx, ref ty);
-                    Mod.i.core.RouteTo(targetMap, false, tx, ty, true);
-                }
+                SLogger.Trace("Cancelling task, not enough stamina!");
                 return;
             }
 
             //step two: scan for forages on the map
             if (!hasScanned)
             {
-                Logger.Warn("Scanning for debris...");
-                var ojs = Game1.currentLocation.objects;
-                List<Vector2> vkeys = ojs.Keys.ToList();
-                vkeys.Shuffle();
-                foreach (var o in vkeys)
+                SLogger.Warn("Scanning for debris...");
+                var farmMap = Mod.i.server.maps.GetMap("Farm");
+                foreach (var location in farmMap.GetLocations().Where(loc => loc.worldObject != null))
                 {
-                    var debrisName = ojs[o].Name;
-                    if (debrisName.Contains("Weed")) {
-                        DebrisSpots.Add(new DebrisSpot() { 
-                            x = (int)o.X, 
-                            y = (int)o.Y,
-                            type = "Weed" 
-                        });
-                    } 
-                    else if(debrisName == "Stone") {
-                        DebrisSpots.Add(new DebrisSpot() {
-                            x = (int)o.X,
-                            y = (int)o.Y,
-                            type = "Stone"
-                        });
+                    DebrisSpot spot = null;
+                    if (location.worldObject.name.Contains("Weed"))
+                    {
+                        spot = new DebrisSpot()
+                        {
+                            worldObject = location.worldObject,
+                            tool = "Axe"
+                        };
                     }
-                    else if (debrisName.Contains("Twig")) {
-                        DebrisSpots.Add(new DebrisSpot() {
-                            x = (int)o.X,
-                            y = (int)o.Y,
-                            type = "Twig"
-                        });
+                    else if (location.worldObject.name == "Stone")
+                    {
+                        spot = new DebrisSpot()
+                        {
+                            worldObject = location.worldObject,
+                            tool = "Pickaxe"
+                        };
+                    }
+                    else if (location.worldObject.name.Contains("Twig"))
+                    {
+                        spot = new DebrisSpot()
+                        {
+                            worldObject = location.worldObject,
+                            tool = "Axe"
+                        };
+                    }
+                    // Confirm we can perform this task before adding it
+                    if (spot != null && (availableTools.Contains(spot.tool) || Mod.i.interaction.EquipToolIfOnHotbar(spot.tool, false)))
+                    {
+                        availableTools.Add(spot.tool);
+                        DebrisSpots.Add(spot);
                     }
                 }
-                Logger.Trace("found " + DebrisSpots.Count(spot => spot.type == "Weed") + " weeds");
-                Logger.Trace("found " + DebrisSpots.Count(spot => spot.type == "Stone") + " rocks");
-                Logger.Trace("found " + DebrisSpots.Count(spot => spot.type == "Twig") + " twigs");
+                SLogger.Trace("found " + DebrisSpots.Count(spot => spot.worldObject.name.Contains("Weed")) + " weeds");
+                SLogger.Trace("found " + DebrisSpots.Count(spot => spot.worldObject.name == "Stone") + " rocks");
+                SLogger.Trace("found " + DebrisSpots.Count(spot => spot.worldObject.name.Contains("Twig")) + " twigs");
+                // Sort the list so it's generally in order
                 DebrisSpots = SortByDistance(DebrisSpots);
                 hasScanned = true;
                 return;
             }
 
             //step three: is there any debris? if not, we're complete
-            if (DebrisSpots.Count == 0)
+            if (DebrisSpots.Count == 0 && currentSpot == null)
             {
                 IsComplete = true;
                 return;
             }
 
+            //are we already pathing?
+            if (currentSpot != null)
+            {
+                switch (Mod.i.pathing.status)
+                {
+                    case PathingManager.Status.Idle:
+                        SLogger.Alert("Pathing was still waiting when spot was assigned, this is wrong!");
+                        break;
+                    case PathingManager.Status.Pathing:
+                        return;
+                    case PathingManager.Status.Arrived:
+                        //pick
+                        Mod.i.interaction.SwingTool();
+                        SLogger.Warn(currentSpot.tool.ToUpper() + "!");
+                        DebrisSpots.Remove(currentSpot);
+                        // Sort the list again
+                        DebrisSpots = SortByDistance(DebrisSpots);
+                        currentSpot = null;
+                        return;
+                    case PathingManager.Status.Stuck:
+                        SLogger.Alert("Pathing got stuck when clearing debris!");
+                        Mod.i.pathing.Stop(PathingManager.Status.Idle);
+                        DebrisSpots.Remove(currentSpot);
+                        currentSpot = null;
+                        break;
+                }
+            }
+
             //check weeds
             //discard nonexistant ones that someone else dealt with
-            while (DebrisSpots.Count > 0 && !Game1.currentLocation.objects.ContainsKey(new Vector2(DebrisSpots[0].x, DebrisSpots[0].y)))
-                DebrisSpots.RemoveAt(0);
+            //while (DebrisSpots.Count > 0 && !Game1.currentLocation.objects.ContainsKey(new Vector2(DebrisSpots[0].worldObject.location.x, DebrisSpots[0].worldObject.location.y)))
+            //    DebrisSpots.RemoveAt(0);
+
             if (DebrisSpots.Count > 0)
             {
                 //TODO: Add back
-                int pathingCutoff = (int)((150f / DebrisSpots.Count) * 150f);
-                var spot = DebrisSpots[0];
-                var tool = "Axe";
-                if (spot.type == "Stone") {
-                    tool = "Pickaxe";
-                }
-                if (Mod.i.core.EquipToolIfOnHotbar(tool, false)) {
+                int pathingCutoff = 9999; //(int)((150f / DebrisSpots.Count) * 150f);
 
-                    if (!WasRoutingToDebris && !DebrisRoutingComplete) {
-                        WasRoutingToDebris = true;
-                        if (!Mod.i.core.RouteTo(targetMap, true, spot.x, spot.y, false, pathingCutoff)) {
-                            //we can't reach this one. remove it from the list
-                            DebrisSpots.RemoveAt(0);
-                            Logger.Trace("Can't route to " + targetMap + ", " + spot.x + "," + spot.y + " " + spot.type + ". " + DebrisSpots.Count() + " remaining.");
-                            WasRoutingToDebris = false;
-                        }
-                        if (WasRoutingToDebris) {
-                            WasRoutingToDebris = false;
-                            DebrisRoutingComplete = true;
-                        }
-                        return;
-                    }
-                    if (DebrisRoutingComplete) {
-                        //step five: face the forage
-                        bool gotcha = (int)(Game1.player.GetToolLocation().X / 64f) == spot.x && (int)(Game1.player.GetToolLocation().Y / 64f) == spot.y;
-                        if (!gotcha) //we're in the wrong spot. try to face
+                // If we have spots that don't have paths yet, create those and request pathing for them. Post 1 new spot for pathing each frame.
+                foreach (var spot in DebrisSpots.Where(aSpot => aSpot.route == null).Take(1))
+                {
+                    SLogger.Trace("Submitting new spot: " + targetMap + "," + spot.worldObject.location.x + "," + spot.worldObject.location.y + " " + spot.worldObject.name + ". For async routing.");
+                    spot.route = Mod.i.routing.GetRoute(spot.worldObject.location);
+                }
+
+                // See if there are any successful spots yet
+                var successfulSpot = DebrisSpots.FirstOrDefault(aSpot => aSpot.route != null && aSpot.route.status == Route.Status.Successful);
+                if (successfulSpot != null)
+                {
+                    // We have a successful spot. Use this one and cancel all others.
+                    Mod.i.interaction.EquipToolIfOnHotbar(successfulSpot.tool);
+                    currentSpot = successfulSpot;
+                    Mod.i.routing.ExecuteRoute(successfulSpot.route);
+                    foreach (var spot in DebrisSpots.Where(aSpot => aSpot != currentSpot).ToList())
+                    {
+                        if (spot.route != null)
                         {
-                            int px = Game1.player.getTileX();
-                            int py = Game1.player.getTileY();
-
-                            Mod.i.core.FaceTile(spot.x, spot.y);
-
-                            WasRoutingToDebris = false;
-                            return;
+                            // Setting this to cancelled will make async processing on them halt on the next loop.
+                            spot.route.Cancel();
                         }
-
-                        //pick
-                        Mod.i.core.EquipToolIfOnHotbar(tool);
-                        Mod.i.core.FaceTile(spot.x, spot.y);
-                        Mod.i.core.SwingTool();
-                        Logger.Warn("HIT!");
-                        DebrisSpots.RemoveAt(0);
-                        DebrisRoutingComplete = false;
-                        // Sort the list again
-                        DebrisSpots = SortByDistance(DebrisSpots);
+                        // Remove the route from the spot so it can be calculated from the new player location.
+                        spot.route = null;
                     }
-                    return;
                 }
-                else {
-                    DebrisSpots.RemoveAt(0);
-                    Logger.Trace("Don't have tool for " + spot.type + ", removing this debris. " + DebrisSpots.Count() + " remaining.");
+                else
+                {
+                    // No successful ones yet. See if there are any failures and remove them.
+                    foreach (var spot in DebrisSpots.Where(aSpot => aSpot.route != null && aSpot.route.status == Route.Status.Failed).ToList())
+                    {
+                        // We can't reach this one, remove it from the list.
+                        DebrisSpots.Remove(spot);
+                        SLogger.Trace("Can't route to " + targetMap + "," + spot.worldObject.location.x + "," + spot.worldObject.location.y + " " + spot.worldObject.name + ". " + DebrisSpots.Count() + " remaining.");
+                    }
                 }
             }
         }
